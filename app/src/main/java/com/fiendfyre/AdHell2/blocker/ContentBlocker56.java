@@ -3,6 +3,7 @@ package com.fiendfyre.AdHell2.blocker;
 import android.support.annotation.Nullable;
 import android.util.Log;
 import android.util.Patterns;
+import android.widget.Toast;
 
 import com.fiendfyre.AdHell2.App;
 import com.fiendfyre.AdHell2.MainActivity;
@@ -36,7 +37,7 @@ public class ContentBlocker56 implements ContentBlocker {
     Firewall mFirewall;
     @Inject
     AppDatabase appDatabase;
-    private int urlBlockLimit = 2700;
+    private int urlBlockLimit = 2700, denyListLimit = 2500;
 
     private ContentBlocker56() {
         App.get().getAppComponent().inject(this);
@@ -176,7 +177,17 @@ public class ContentBlocker56 implements ContentBlocker {
         List<String> allowList = new ArrayList<>();
         List<DomainFilterRule> rules = new ArrayList<>();
         AppIdentity appIdentity = new AppIdentity("*", null);
-        rules.add(new DomainFilterRule(appIdentity, denyList, allowList));
+
+        //Trying to add a single rule containing more than 15000 urls returns NULL response
+        //So, let's break down denyList into chunks and make multiple rules
+        int start = 0, end = denyListLimit;
+        do {
+            rules.add(new DomainFilterRule(appIdentity, denyList.subList(start,end), allowList));
+            start = end;
+            end = (end+denyListLimit)>denyList.size()? denyList.size(): end+denyListLimit;
+        } while (start!=end);
+
+        //rules.add(new DomainFilterRule(appIdentity, denyList, allowList));
         List<String> superAllow = new ArrayList<>();
         superAllow.add("*");
         List<AppInfo> appInfos = appDatabase.applicationInfoDao().getWhitelistedApps();
@@ -227,7 +238,11 @@ public class ContentBlocker56 implements ContentBlocker {
 
         try {
             Log.d(TAG, "Adding: DENY DOMAINS");
-            FirewallResponse[] response = mFirewall.addDomainFilterRules(rules);
+            //each iteration (2500 urls) takes up to 30secs on S8+
+            for(int i = 0 ; i<rules.size(); i++) {
+                FirewallResponse[] response = mFirewall.addDomainFilterRules(rules.subList(i,i+1));
+                Log.d(TAG, "Added rule "+ i + " . Response : " + (response!=null? response[0].getMessage() : "NULL"));
+            }
 
             if (!mFirewall.isFirewallEnabled()) {
                 mFirewall.enableFirewall(true);
@@ -236,14 +251,19 @@ public class ContentBlocker56 implements ContentBlocker {
                 Log.d(TAG, "Enabling filewall report");
                 mFirewall.enableDomainFilterReport(true);
             }
-            if (FirewallResponse.Result.SUCCESS == response[0].getResult()) {
-                Log.i(TAG, "Adhell enabled " + response[0].getMessage());
-                return true;
-            } else {
-                Log.i(TAG, "Adhell enabling failed " + response[0].getMessage());
-                return false;
-            }
-        } catch (SecurityException ex) {
+            return true;
+//            if(response==null){
+//                Log.i(TAG, "Adhell enabling failed. NULL response. List size too big? ");
+//                throw new Exception();
+//            }
+//            if (FirewallResponse.Result.SUCCESS == response[0].getResult()) {
+//                Log.i(TAG, "Adhell enabled " + response[0].getMessage());
+//                return true;
+//            } else {
+//                Log.i(TAG, "Adhell enabling failed " + response[0].getMessage());
+//                return false;
+//            }
+        } catch (Exception ex) {
             Log.e(TAG, "Adhell enabling failed", ex);
             return false;
         }

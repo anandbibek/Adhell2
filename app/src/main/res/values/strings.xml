@@ -143,7 +143,7 @@
     <string name="already_premium">Already Premium</string>
     <string name="custom_url_provider_message">
         Note. You can add your own hosts link (e.g. https://adaway.org/hosts.txt).
-        You can block up to 15 000 urls.
+        You can block up to 1 50 000 urls.
         Adhell already has decent standard package so in general you does not need to add additional
         packages.
         This feature is experimental for now and only for enthusiasts.
